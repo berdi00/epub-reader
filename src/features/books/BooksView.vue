@@ -1,7 +1,7 @@
 <template>
   <div class="books-container">
     <!-- Upload Section -->
-    <div class="upload-section">
+    <div class="p-2 bg-white md:p-3 rounded-lg shadow mb-2 md:mb-3">
       <UploadComponent
         :email="session?.user.email || '@'"
         @book-uploaded="handleBookUploaded"
@@ -53,21 +53,22 @@
             </div>
           </div>
 
-          <div class="book-actions">
-            <button
+          <div class="flex w-full justify-between">
+            <Button
               @click="openBook(book)"
-              class="action-btn primary"
+              class="w-[120px]"
             >
               <span>{{ getReadingProgress(book.id) ? 'Continue' : 'Start Reading' }}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               @click="deleteBook(book)"
-              class="action-btn danger"
               :disabled="deletingBook === book.id"
+              variant="destructive"
+              class="w-[120px]"
             >
               <span v-if="deletingBook === book.id">Deleting...</span>
               <span v-else>Delete</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -77,43 +78,23 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import { supabase } from '@/supabase'
 import UploadComponent from './BooksHeader.vue'
 import { useRouter } from 'vue-router'
 import type { Session } from '@supabase/supabase-js'
+import type { Book, ReadingProgress } from '../types'
+import Button from '@/components/ui/button/Button.vue'
 
 const router = useRouter()
 const session = ref<Session>()
-interface Book {
-  id: string
-  title: string
-  author: string
-  file_name: string
-  file_path: string
-  file_size: number
-  total_chapters?: number
-  language?: string
-  publisher?: string
-  description?: string
-  uploaded_at: string
-}
-
-interface ReadingProgress {
-  book_id: string
-  chapter_index: number
-  chapter_progress_percentage: number
-  total_book_percentage: number
-  character_offset: number
-  last_read_at: string
-}
 
 onMounted(() => {
   supabase.auth.getSession().then(({ data }) => {
-    session.value = data.session
+    session.value = data.session as Session
   })
   supabase.auth.onAuthStateChange((_, _session) => {
-    session.value = _session
+    session.value = _session as Session
   })
 })
 
@@ -232,14 +213,10 @@ const handleUploadError = (error: string) => {
   showMessage(error, 'error')
 }
 
-// Lifecycle
 onMounted(() => {
   loadBooks()
 })
 
-onUnmounted(() => {
-  // Cleanup if needed
-})
 </script>
 
 <style scoped>
@@ -248,14 +225,6 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 2rem;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.upload-section {
-  background: white;
-  border-radius: 12px;
-  padding: 1.5rem;
-  margin-bottom: 2rem;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .message {

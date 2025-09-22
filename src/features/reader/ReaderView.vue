@@ -160,7 +160,6 @@ const saveReadingProgress = async () => {
         character_offset: position.characterOffset,
         last_read_at: new Date().toISOString()
       }, { onConflict: 'user_id' })
-    debugger
   } catch (error) {
     console.error('Error saving reading progress:', error)
   }

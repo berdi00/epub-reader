@@ -2,7 +2,7 @@
   <div class="flex justify-between items-center">
     <p class="text-primary">{{ email }}</p>
     <Button
-      class="bg-primary"
+      class="bg-primary text-white"
       variant="outline"
       @click="triggerFileUpload"
       :disabled="isUploading"
@@ -191,7 +191,6 @@ const handleFileUpload = async (event: Event): Promise<void> => {
     if (fileInput.value) {
       fileInput.value.value = ''
     }
-
     emit('bookUploaded', bookData)
   } catch (error) {
     console.error('Upload error:', error)

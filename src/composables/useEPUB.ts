@@ -269,9 +269,6 @@ export const useEpub = () => {
       // Wrap each chapter with a container for navigation
       combinedContent += `
         <div class="chapter-container" id="chapter-${i}" data-chapter-index="${i}" data-char-count="${chapterCharCount}">
-          <div class="chapter-header">
-            <h2 class="chapter-title-header">${chapter.title}</h2>
-          </div>
           <div class="chapter-content">
             ${chapterContent}
           </div>
@@ -430,7 +427,6 @@ export const useEpub = () => {
   const getCurrentReadingPosition = () => {
     const contentElement = document.querySelector('.reader-content')
     const scrollTop = contentElement?.scrollTop || 0
-    debugger
     return {
       chapterIndex: currentChapterIndex.value,
       chapterProgressPercentage: currentChapterProgress.value,
@@ -493,21 +489,6 @@ export const useEpub = () => {
     goToChapter(chapterIndex)
   }
 
-  // Calculate estimated page numbers for display
-  const getEstimatedPageInfo = () => {
-    const wordsPerPage = bookStats.value.averageWordsPerPage
-    const estimatedTotalWords = Math.round(bookStats.value.totalCharacters / 5) // ~5 chars per word
-    const estimatedTotalPages = Math.max(1, Math.round(estimatedTotalWords / wordsPerPage))
-    const currentEstimatedPage = Math.max(1, Math.round((totalBookProgress.value / 100) * estimatedTotalPages))
-
-    return {
-      currentPage: currentEstimatedPage,
-      totalPages: estimatedTotalPages,
-      currentWord: Math.round((currentCharacterOffset.value / bookStats.value.totalCharacters) * estimatedTotalWords),
-      totalWords: estimatedTotalWords
-    }
-  }
-
   return {
     // Methods
     parseEpub,
@@ -521,7 +502,6 @@ export const useEpub = () => {
     resetReader,
     getCurrentReadingPosition,
     setReadingPosition,
-    getEstimatedPageInfo,
     processImagesInDOM
   }
 }

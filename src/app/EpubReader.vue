@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, computed } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEpub } from '@/composables/useEPUB'
 import { storeToRefs } from 'pinia'
 import { useReaderStore } from '@/features/reader/store'
+import Button from '@/components/ui/button/Button.vue'
+import { ArrowLeft, MenuIcon } from 'lucide-vue-next'
 
 // Router
 const router = useRouter()
@@ -28,25 +30,10 @@ const {
   prevChapter,
   goToChapter,
   resetReader,
-  getEstimatedPageInfo,
 } = useEpub()
 
 // Local state
 const sidebarOpen = ref<boolean>(false)
-
-// Real-time progress tracking - now using the composable's values
-const pageInfo = computed(() => getEstimatedPageInfo())
-
-const updateScrollProgress = () => {
-  // The composable handles this automatically via scroll listeners
-  // This function is kept for compatibility but is no longer needed
-}
-
-// Props for loading specific books (removed since handled by parent)
-// const props = defineProps<{
-//   bookFile?: File
-//   bookBlob?: Blob
-// }>()
 
 // File handling - removed since handled by parent component
 const goBack = () => {
@@ -81,12 +68,6 @@ const handleKeydown = (event: KeyboardEvent): void => {
 // Load book from props if provided - removed since handled by parent
 onMounted(async () => {
   document.addEventListener('keydown', handleKeydown)
-
-  // Set up scroll progress tracking
-  const contentElement = document.querySelector('.reader-content')
-  if (contentElement) {
-    contentElement.addEventListener('scroll', updateScrollProgress)
-  }
 })
 
 onUnmounted(() => {
@@ -100,13 +81,13 @@ onUnmounted(() => {
   <div class="epub-reader">
     <!-- Header -->
     <header class="header">
-      <button @click="toggleSidebar" type="button" class="menu-btn">
-        ☰ Menu
-      </button>
+      <Button @click="toggleSidebar" type="button" class="w-[40px]">
+        <MenuIcon class="w-4 h-4" />
+      </Button>
       <h1 class="book-title">{{ bookTitle }}</h1>
-      <button @click="goBack" class="back-btn">
-        ← Library
-      </button>
+      <Button @click="goBack" class="w-[40px]">
+        <ArrowLeft class="w-10 h-10" />
+      </Button>
     </header>
 
     <div class="main-content">
@@ -155,13 +136,7 @@ onUnmounted(() => {
 
         <!-- Error State -->
         <div v-else-if="error" class="error-screen">
-          <div class="error-content">
-            <h2>📚 Error Loading Book</h2>
-            <p>{{ error }}</p>
-            <label for="epub-file" class="upload-btn">
-              Try Another File
-            </label>
-          </div>
+          <p>{{ error }}</p>
         </div>
 
         <!-- Reader Content -->
@@ -183,7 +158,7 @@ onUnmounted(() => {
       <div class="progress-container">
         <div class="progress-info">
           <span class="desktop-progress">
-            Reading Progress: {{ Math.round(totalBookProgress) }}% • Page ~{{ pageInfo.currentPage }} of {{ pageInfo.totalPages }}
+            Reading Progress: {{ Math.round(totalBookProgress) }}%
           </span>
           <span class="mobile-progress">
             Ch. {{ currentChapterIndex + 1 }}/{{ totalChapters }} • {{ Math.round(totalBookProgress) }}%
@@ -230,22 +205,6 @@ onUnmounted(() => {
   gap: 1rem;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   z-index: 100;
-}
-
-.menu-btn {
-  background: none;
-  border: none;
-  color: white;
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-
-.menu-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-  transform: scale(1.05);
 }
 
 .book-title {
@@ -538,10 +497,6 @@ onUnmounted(() => {
   font-weight: 700;
   color: #1e293b;
   margin: 0;
-}
-
-.content-wrapper :deep(.chapter-content) {
-  /* Chapter content styles */
 }
 
 .content-wrapper :deep(h1),
