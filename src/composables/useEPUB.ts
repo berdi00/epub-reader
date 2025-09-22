@@ -427,21 +427,20 @@ export const useEpub = () => {
   const getCurrentReadingPosition = () => {
     const contentElement = document.querySelector('.reader-content')
     const scrollTop = contentElement?.scrollTop || 0
-    return {
+    const calcValues = {
       chapterIndex: currentChapterIndex.value,
       chapterProgressPercentage: currentChapterProgress.value,
       totalBookPercentage: totalBookProgress.value,
       characterOffset: currentCharacterOffset.value,
       scrollPosition: scrollTop // Keep for backward compatibility
     }
+    return calcValues
   }
 
   // Set reading position (for restoring saved progress)
   const setReadingPosition = async (
     chapterIndex: number,
     chapterProgressPercentage?: number,
-    characterOffset?: number,
-    fallbackScrollPosition?: number
   ) => {
     await nextTick()
 
@@ -451,8 +450,9 @@ export const useEpub = () => {
       if (chapterElement) {
         const chapterHeight = chapterElement.offsetHeight
         const targetScrollWithinChapter = (chapterProgressPercentage / 100) * chapterHeight
+        const extraDesktop = 400
+        const extraMobile = 250
         const targetScrollPosition = chapterElement.offsetTop + targetScrollWithinChapter
-
         const contentElement = document.querySelector('.reader-content')
         if (contentElement) {
           contentElement.scrollTop = targetScrollPosition
@@ -460,33 +460,6 @@ export const useEpub = () => {
         }
       }
     }
-
-    // Method 2: Try character offset approximation
-    if (characterOffset !== undefined && characterOffset > 0 && bookStats.value.totalCharacters > 0) {
-      const contentElement = document.querySelector('.reader-content')
-      if (contentElement) {
-        const scrollRatio = characterOffset / bookStats.value.totalCharacters
-        const scrollHeight = contentElement.scrollHeight
-        const clientHeight = contentElement.clientHeight
-        const maxScroll = scrollHeight - clientHeight
-        const targetScroll = scrollRatio * maxScroll
-
-        contentElement.scrollTop = Math.max(0, Math.min(maxScroll, targetScroll))
-        return
-      }
-    }
-
-    // Method 3: Fallback to old scroll position
-    if (fallbackScrollPosition !== undefined) {
-      const contentElement = document.querySelector('.reader-content')
-      if (contentElement) {
-        contentElement.scrollTop = fallbackScrollPosition
-        return
-      }
-    }
-
-    // Method 4: Just go to chapter start
-    goToChapter(chapterIndex)
   }
 
   return {

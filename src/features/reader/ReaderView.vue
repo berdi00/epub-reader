@@ -29,7 +29,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { supabase } from '@/supabase'
 import EpubReader from '@/app/EpubReader.vue'
@@ -39,7 +39,7 @@ import { useReaderStore } from './store'
 
 const { chapters, bookData, readingProgress } = storeToRefs(useReaderStore())
 
-const { loadEpubFromFile, setReadingPosition, resetReader, getCurrentReadingPosition } = useEpub()
+const { loadEpubFromFile, setReadingPosition } = useEpub()
 
 // Router
 const route = useRoute()
@@ -51,9 +51,6 @@ const error = ref<string | null>(null)
 const bookLoaded = ref(false)
 const loadingMessage = ref('Fetching book details...')
 const bookId = ref<string>(route.params.id as string)
-
-// Auto-save interval
-let autoSaveInterval: NodeJS.Timeout | null = null
 
 const loadBook = async () => {
   try {
@@ -118,14 +115,10 @@ const loadBook = async () => {
       await setReadingPosition(
         progress.chapter_index,
         progress.chapter_progress_percentage,
-        progress.character_offset
       )
     }
 
     bookLoaded.value = true
-
-    // Start auto-save for reading progress
-    startAutoSave()
   } catch (err) {
     console.error('Error loading book:', err)
     error.value = 'An unexpected error occurred while loading the book.'
@@ -134,36 +127,16 @@ const loadBook = async () => {
   }
 }
 
-const startAutoSave = () => {
-  // Auto-save reading progress every 30 seconds
-  autoSaveInterval = setInterval(() => {
-    saveReadingProgress()
-  }, 20000)
-}
+// const startAutoSave = () => {
+//   // Auto-save reading progress every 30 seconds
+//   autoSaveInterval = setInterval(() => {
+//     saveReadingProgress()
+//   }, 20000)
+// }
 
-const saveReadingProgress = async () => {
-  if (!bookData.value) { return }
-  try {
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { return }
-
-    const position = getCurrentReadingPosition()
-
-    await supabase
-      .from('reading_progress')
-      .upsert({
-        user_id: user.id,
-        book_id: bookData.value.id,
-        chapter_index: position.chapterIndex,
-        chapter_progress_percentage: position.chapterProgressPercentage,
-        total_book_percentage: position.totalBookPercentage,
-        character_offset: position.characterOffset,
-        last_read_at: new Date().toISOString()
-      }, { onConflict: 'user_id' })
-  } catch (error) {
-    console.error('Error saving reading progress:', error)
-  }
-}
+onMounted(() => {
+  loadBook()
+})
 
 const retryLoading = () => {
   bookLoaded.value = false
@@ -174,35 +147,6 @@ const goBack = () => {
   router.push('/')
 }
 
-// Handle page unload
-const handleBeforeUnload = () => {
-  saveReadingProgress()
-}
-
-// Lifecycle
-onMounted(() => {
-  loadBook()
-  window.addEventListener('beforeunload', handleBeforeUnload)
-})
-
-onBeforeUnmount(() => {
-  // Save progress before component unmounts
-  saveReadingProgress()
-
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval)
-  }
-})
-
-onUnmounted(() => {
-  window.removeEventListener('beforeunload', handleBeforeUnload)
-
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval)
-  }
-
-  resetReader()
-})
 </script>
 
 <style scoped>

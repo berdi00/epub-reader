@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue'
+import { onBeforeUnmount, onMounted, onUnmounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEpub } from '@/composables/useEPUB'
 import { storeToRefs } from 'pinia'
 import { useReaderStore } from '@/features/reader/store'
 import Button from '@/components/ui/button/Button.vue'
 import { ArrowLeft, MenuIcon } from 'lucide-vue-next'
+import { supabase } from '@/supabase'
 
 // Router
 const router = useRouter()
@@ -19,6 +20,7 @@ const {
   error,
   currentChapterProgress,
   totalBookProgress,
+  bookData,
   // Computed
   totalChapters,
 } = storeToRefs(useReaderStore())
@@ -30,10 +32,11 @@ const {
   prevChapter,
   goToChapter,
   resetReader,
+  getCurrentReadingPosition
 } = useEpub()
 
 // Local state
-const sidebarOpen = ref<boolean>(false)
+const sidebarOpen = ref<boolean>(true)
 
 // File handling - removed since handled by parent component
 const goBack = () => {
@@ -65,87 +68,120 @@ const handleKeydown = (event: KeyboardEvent): void => {
   }
 }
 
-// Load book from props if provided - removed since handled by parent
-onMounted(async () => {
+const saveReadingProgress = async () => {
+  if (!bookData.value) { return }
+  const position = getCurrentReadingPosition()
+  try {
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { return }
+
+    await supabase
+      .from('reading_progress')
+      .upsert({
+        user_id: user.id,
+        book_id: bookData.value.id,
+        chapter_index: position.chapterIndex,
+        chapter_progress_percentage: position.chapterProgressPercentage,
+        total_book_percentage: position.totalBookPercentage,
+        character_offset: position.characterOffset,
+        last_read_at: new Date().toISOString()
+      }, { onConflict: 'user_id' })
+  } catch (error) {
+    console.error('Error saving reading progress:', error)
+  }
+}
+
+// Handle page unload
+const handleBeforeUnload = () => {
+  saveReadingProgress()
+}
+
+onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  window.addEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeUnmount(() => {
+  saveReadingProgress()
 })
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('beforeunload', handleBeforeUnload)
   resetReader()
 })
 
 </script>
 
 <template>
-  <div class="epub-reader">
+  <div class="flex flex-col h-screen font-sans bg-slate-50 text-slate-700">
     <!-- Header -->
-    <header class="header">
-      <Button @click="toggleSidebar" type="button" class="w-[40px]">
+    <header class="bg-gradient-to-br from-indigo-500 to-purple-600 text-white px-6 py-4 flex items-center gap-4 shadow-lg z-50">
+      <Button @click="toggleSidebar" type="button" class="w-10 h-10 p-0">
         <MenuIcon class="w-4 h-4" />
       </Button>
-      <h1 class="book-title">{{ bookTitle }}</h1>
-      <Button @click="goBack" class="w-[40px]">
-        <ArrowLeft class="w-10 h-10" />
+      <h1 class="flex-1 text-lg font-semibold truncate">{{ bookTitle }}</h1>
+      <Button @click="goBack" class="w-10 h-10 p-0">
+        <ArrowLeft class="w-4 h-4" />
       </Button>
     </header>
 
-    <div class="main-content">
+    <div class="flex flex-1 overflow-hidden relative">
       <!-- Sidebar -->
-      <aside class="sidebar" :class="{ 'sidebar-open': sidebarOpen }">
-        <div class="sidebar-header">
-          <h2>Table of Contents</h2>
-          <button @click="toggleSidebar" class="close-btn">✕</button>
+      <aside
+        class="w-80 bg-white border-r border-slate-200 flex flex-col transform transition-transform duration-300 absolute h-full z-40 shadow-xl"
+        :class="{ 'translate-x-0': sidebarOpen, '-translate-x-full': !sidebarOpen }"
+      >
+        <div class="px-6 py-6 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+          <h2 class="text-lg font-semibold text-slate-800">Table of Contents</h2>
+          <button @click="toggleSidebar" class="text-slate-500 hover:bg-slate-200 hover:text-slate-800 p-1 rounded transition-all">
+            ✕
+          </button>
         </div>
 
-        <div class="sidebar-content">
-          <ul v-if="chapters.length > 0" class="chapter-list">
+        <div class="flex-1 overflow-y-auto py-2">
+          <ul v-if="chapters.length > 0" class="space-y-0">
             <li
               v-for="(chapter, index) in chapters"
               :key="chapter.id"
               @click="goToChapterAndCloseSidebar(index)"
-              class="chapter-item"
-              :class="{ 'active': currentChapterIndex === index }"
+              class="px-6 py-3 cursor-pointer transition-all border-l-3 border-transparent hover:bg-slate-100 hover:border-slate-300"
+              :class="{
+                'bg-blue-50 border-blue-500 text-blue-800': currentChapterIndex === index
+              }"
             >
-              <span class="chapter-title">{{ chapter.title }}</span>
+              <span class="text-sm leading-relaxed">{{ chapter.title }}</span>
             </li>
           </ul>
-          <div v-else class="no-chapters">
+          <div v-else class="px-6 py-8 text-center text-slate-500">
             <p>No chapters loaded</p>
-            <p class="hint">Upload an EPUB file to get started</p>
+            <p class="text-xs mt-2 text-slate-400">Upload an EPUB file to get started</p>
           </div>
         </div>
       </aside>
 
-      <!-- Overlay for mobile -->
-      <div
-        v-if="sidebarOpen"
-        class="sidebar-overlay"
-        @click="toggleSidebar"
-      />
-
       <!-- Main Content -->
-      <main class="reader-main">
+      <main class="flex-1 flex flex-col overflow-hidden">
         <!-- Loading State -->
-        <div v-if="isLoading" class="loading-screen">
-          <div class="loading-content">
-            <div class="loading-spinner"/>
+        <div v-if="isLoading" class="flex-1 flex items-center justify-center bg-white">
+          <div class="text-center text-slate-500">
+            <div class="w-10 h-10 border-4 border-slate-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4"/>
             <p>Loading EPUB...</p>
           </div>
         </div>
 
         <!-- Error State -->
-        <div v-else-if="error" class="error-screen">
-          <p>{{ error }}</p>
+        <div v-else-if="error" class="flex-1 flex items-center justify-center bg-red-50">
+          <p class="text-red-600">{{ error }}</p>
         </div>
 
         <!-- Reader Content -->
         <template v-else>
           <!-- Content Area -->
-          <div class="reader-content">
+          <div class="flex-1 overflow-y-auto bg-white reader-content">
             <div
               v-if="currentContent"
-              class="content-wrapper"
+              class="max-w-4xl mx-auto px-8 py-8 leading-relaxed text-lg content-wrapper"
               v-html="currentContent"
             />
           </div>
@@ -154,25 +190,25 @@ onUnmounted(() => {
     </div>
 
     <!-- Progress Bar -->
-    <footer class="footer" v-if="totalChapters > 0">
-      <div class="progress-container">
-        <div class="progress-info">
-          <span class="desktop-progress">
+    <footer v-if="totalChapters > 0" class="bg-white border-t border-slate-200 px-6 py-4">
+      <div class="max-w-4xl mx-auto">
+        <div class="flex justify-between items-center mb-2 text-sm text-slate-600 font-medium">
+          <span class="hidden sm:block">
             Reading Progress: {{ Math.round(totalBookProgress) }}%
           </span>
-          <span class="mobile-progress">
+          <span class="block sm:hidden font-semibold">
             Ch. {{ currentChapterIndex + 1 }}/{{ totalChapters }} • {{ Math.round(totalBookProgress) }}%
           </span>
-          <span class="chapter-indicator">{{ chapters[currentChapterIndex]?.title }}</span>
+          <span class="text-xs text-slate-400 max-w-48 truncate">{{ chapters[currentChapterIndex]?.title }}</span>
         </div>
-        <div class="progress-bar">
+        <div class="bg-slate-200 h-2 rounded-full overflow-hidden">
           <div
-            class="progress-fill"
+            class="bg-gradient-to-r from-blue-500 to-purple-600 h-full rounded-full transition-all duration-300"
             :style="{ width: totalBookProgress + '%' }"
           />
         </div>
-        <div class="detailed-progress">
-          <span class="chapter-progress">{{ Math.round(currentChapterProgress) }}% through current chapter</span>
+        <div class="text-center mt-1">
+          <span class="text-xs text-slate-400">{{ Math.round(currentChapterProgress) }}% through current chapter</span>
         </div>
       </div>
     </footer>
@@ -180,514 +216,61 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-.epub-reader {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #f8fafc;
-  color: #334155;
-}
-
-/* Header */
-.header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem 1.5rem;
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-  z-index: 100;
-}
-
-.book-title {
-  flex: 1;
-  font-size: 1.1rem;
-  font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.file-input {
-  display: none;
-}
-
-.file-label {
-  background: rgba(255, 255, 255, 0.2);
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-}
-
-.file-label:hover {
-  background: rgba(255, 255, 255, 0.3);
-  transform: translateY(-1px);
-}
-
-/* Main Content */
-.main-content {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 320px;
-  background: white;
-  border-right: 1px solid #e2e8f0;
-  display: flex;
-  flex-direction: column;
-  transform: translateX(-100%);
-  transition: transform 0.3s ease;
-  position: absolute;
-  height: 100%;
-  z-index: 50;
-  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.sidebar-open {
-  transform: translateX(0);
-}
-
-.sidebar-header {
-  padding: 1.5rem;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: #f8fafc;
-}
-
-.sidebar-header h2 {
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #1e293b;
-}
-
-.close-btn {
-  background: none;
-  border: none;
-  font-size: 1.2rem;
-  cursor: pointer;
-  color: #64748b;
-  padding: 0.25rem;
-  border-radius: 4px;
-  transition: all 0.2s;
-}
-
-.close-btn:hover {
-  background: #e2e8f0;
-  color: #1e293b;
-}
-
-.sidebar-content {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0.5rem 0;
-}
-
-.chapter-list {
-  list-style: none;
-}
-
-.chapter-item {
-  display: flex;
-  align-items: center;
-  padding: 0.75rem 1.5rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  border-left: 3px solid transparent;
-}
-
-.chapter-item:hover {
-  background: #f1f5f9;
-  border-left-color: #e2e8f0;
-}
-
-.chapter-item.active {
-  background: #eff6ff;
-  border-left-color: #3b82f6;
-  color: #1d4ed8;
-}
-
-.chapter-number {
-  font-size: 0.8rem;
-  font-weight: 600;
-  min-width: 2rem;
-  color: #64748b;
-}
-
-.chapter-title {
-  flex: 1;
-  font-size: 0.9rem;
-  line-height: 1.4;
-}
-
-.chapter-item.active .chapter-number,
-.chapter-item.active .chapter-title {
-  color: #1d4ed8;
-}
-
-.no-chapters {
-  padding: 2rem 1.5rem;
-  text-align: center;
-  color: #64748b;
-}
-
-.no-chapters .hint {
-  font-size: 0.85rem;
-  margin-top: 0.5rem;
-  color: #94a3b8;
-}
-
-.sidebar-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 40;
-}
-
-/* Reader Main */
-.reader-main {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Loading State */
-.loading-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: white;
-}
-
-.loading-content {
-  text-align: center;
-  color: #64748b;
-}
-
-.loading-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e2e8f0;
-  border-top: 4px solid #3b82f6;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 1rem;
-}
-
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Error State */
-.error-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: #fef2f2;
-}
-
-.error-content {
-  text-align: center;
-  padding: 2rem;
-}
-
-.error-content h2 {
-  color: #dc2626;
-  font-size: 1.5rem;
-  margin-bottom: 1rem;
-}
-
-.error-content p {
-  color: #7f1d1d;
-  margin-bottom: 2rem;
-}
-
-.nav-controls {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.5rem;
-  background: white;
-  border-bottom: 1px solid #e2e8f0;
-  gap: 1rem;
-}
-
-.nav-btn {
-  background: #3b82f6;
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-  font-weight: 500;
-}
-
-.nav-btn:hover:not(:disabled) {
-  background: #2563eb;
-  transform: translateY(-1px);
-}
-
-.nav-btn:disabled {
-  background: #cbd5e1;
-  cursor: not-allowed;
-  transform: none;
-}
-
-.chapter-info {
-  font-weight: 500;
-  color: #475569;
-  font-size: 0.9rem;
-}
-
-.reader-content {
-  flex: 1;
-  overflow-y: auto;
-  background: white;
-}
-
-.content-wrapper {
-  max-width: 800px;
-  margin: 0 auto;
-  padding: 2rem;
-  line-height: 1.7;
-  font-size: 1.1rem;
-}
-
+@import "tailwindcss";
 /* Chapter containers in continuous view */
 .content-wrapper :deep(.chapter-container) {
-  margin-bottom: 3rem;
-  scroll-margin-top: 2rem; /* For smooth navigation */
+  @apply mb-12 scroll-mt-8;
 }
 
 .content-wrapper :deep(.chapter-header) {
-  border-bottom: 2px solid #e2e8f0;
-  padding-bottom: 1rem;
-  margin-bottom: 2rem;
+  @apply border-b-2 border-slate-200 pb-4 mb-8;
 }
 
 .content-wrapper :deep(.chapter-title-header) {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #1e293b;
-  margin: 0;
+  @apply text-2xl font-bold text-slate-800 m-0;
 }
 
 .content-wrapper :deep(h1),
 .content-wrapper :deep(h2),
 .content-wrapper :deep(h3) {
-  margin-top: 2rem;
-  margin-bottom: 1rem;
-  color: #1e293b;
+  @apply mt-8 mb-4 text-slate-800;
 }
 
 .content-wrapper :deep(p) {
-  margin-bottom: 1rem;
-  text-align: justify;
+  @apply mb-4 text-justify;
 }
 
 .content-wrapper :deep(img) {
-  max-width: 100%;
-  height: auto;
-  display: block;
-  margin: 1.5rem auto;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  @apply max-w-full h-auto block mx-auto my-6 rounded-lg shadow-md;
 }
 
-.welcome-screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-}
-
-.welcome-content {
-  text-align: center;
-  padding: 2rem;
-}
-
-.welcome-content h2 {
-  font-size: 2rem;
-  margin-bottom: 1rem;
-  color: #1e293b;
-}
-
-.welcome-content p {
-  color: #64748b;
-  margin-bottom: 2rem;
-  font-size: 1.1rem;
-}
-
-.upload-btn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 1rem 2rem;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: inline-block;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.upload-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-}
-
-/* Footer */
-.footer {
-  background: white;
-  border-top: 1px solid #e2e8f0;
-  padding: 1rem 1.5rem;
-}
-
-.progress-container {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-  font-size: 0.9rem;
-  color: #64748b;
-  font-weight: 500;
-}
-
-.desktop-progress {
-  display: block;
-}
-
-.mobile-progress {
-  display: none;
-  font-weight: 600;
-}
-
-.chapter-indicator {
-  font-size: 0.8rem;
-  color: #94a3b8;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.detailed-progress {
-  text-align: center;
-  margin-top: 0.25rem;
-}
-
-.chapter-progress {
-  font-size: 0.75rem;
-  color: #94a3b8;
-}
-
-.progress-bar {
-  background: #e2e8f0;
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  height: 100%;
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-/* Responsive */
+/* Responsive sidebar */
 @media (min-width: 768px) {
   .sidebar {
-    position: static;
-    transform: translateX(0);
-    z-index: auto;
+    @apply static transform-none z-auto;
   }
 
   .sidebar-overlay {
-    display: none;
+    @apply hidden;
   }
 
   .close-btn {
-    display: none;
+    @apply hidden;
   }
 }
 
+/* Mobile adjustments */
 @media (max-width: 640px) {
-  .header {
-    padding: 0.75rem 1rem;
-  }
-
-  .nav-controls {
-    padding: 0.75rem 1rem;
-  }
-
   .content-wrapper {
-    padding: 1rem;
-    font-size: 1rem;
+    @apply px-4 text-base;
   }
 
   .content-wrapper :deep(.chapter-header) {
-    margin-bottom: 1.5rem;
+    @apply mb-6;
   }
 
   .content-wrapper :deep(.chapter-title-header) {
-    font-size: 1.3rem;
-  }
-
-  .welcome-content h2 {
-    font-size: 1.5rem;
-  }
-
-  /* Mobile progress indicator */
-  .desktop-progress {
-    display: none;
-  }
-
-  .mobile-progress {
-    display: block;
-  }
-
-  .chapter-indicator {
-    max-width: 120px;
-    font-size: 0.75rem;
-  }
-
-  .progress-info {
-    flex-direction: column;
-    gap: 0.25rem;
-    align-items: center;
+    @apply text-xl;
   }
 }
 </style>
