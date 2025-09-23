@@ -1,13 +1,13 @@
 import type JSZip from 'jszip'
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import type { Chapter } from './types'
+import type { Book } from './features/types'
 
 export const useReaderStore = defineStore('reader', () => {
   // Reactive state
   const book = ref<JSZip | null>(null)
   const currentChapterIndex = ref<number>(0)
-  const chapters = ref<Chapter[]>([])
+  const chapters = ref<any[]>([])
   const currentContent = ref<string>('')
   const bookTitle = ref<string>('No book loaded')
   const opfDirectory = ref<string>('')
@@ -33,5 +33,7 @@ export const useReaderStore = defineStore('reader', () => {
   const bookData = ref<any>(null)
   const readingProgress = ref<any>(null)
 
-  return { progress, currentContent, bookTitle, opfDirectory, imageCache, isLoading, error, chapters, currentChapterIndex, book, totalChapters, currentChapterProgress, totalBookProgress, currentCharacterOffset, scrollCleanup, bookData, readingProgress }
+  const booksList = ref<Book[]>([])
+
+  return { progress, currentContent, bookTitle, opfDirectory, imageCache, isLoading, error, chapters, currentChapterIndex, book, totalChapters, currentChapterProgress, totalBookProgress, currentCharacterOffset, scrollCleanup, bookData, readingProgress, booksList }
 })

@@ -7,16 +7,11 @@
         @book-uploaded="handleBookUploaded"
         @upload-error="handleUploadError"
       />
-
-      <!-- Error/Success Messages -->
-      <div v-if="uploadMessage" class="message" :class="messageType">
-        {{ uploadMessage }}
-      </div>
     </div>
 
     <!-- Books List -->
     <div class="books-list">
-      <h2>Your Library ({{ books.length }}/3)</h2>
+      <h2>Your Library ({{ booksList.length }}/3)</h2>
 
       <div v-if="loading" class="loading">
         Loading your books...
@@ -24,19 +19,21 @@
 
       <div v-else class="books-grid">
         <div
-          v-for="book in books"
+          v-for="book in booksList"
           :key="book.id"
           class="book-card"
         >
           <div class="book-info">
             <h3 class="book-title">{{ book.title }}</h3>
             <p class="book-author">by {{ book.author }}</p>
-            <div class="book-meta">
+            <div class="w-full h-[200px]">
+              <img class="h-full w-full object-top object-cover" :src="book.cover_url" alt="Cover">
+            </div>
+            <!-- <div class="book-meta">
               <span v-if="book.total_chapters">{{ book.total_chapters }} chapters</span>
               <span class="file-size">{{ formatFileSize(book.file_size) }}</span>
             </div>
 
-            <!-- Reading Progress -->
             <div v-if="getReadingProgress(book.id)" class="reading-progress">
               <div class="progress-bar">
                 <div
@@ -50,25 +47,17 @@
                   • Chapter {{ getReadingProgress(book.id).chapter_index + 1 }}
                 </span>
               </span>
-            </div>
+            </div> -->
           </div>
 
           <div class="flex w-full justify-between">
             <Button
               @click="openBook(book)"
-              class="w-[120px]"
+              class="w-full"
             >
-              <span>{{ getReadingProgress(book.id) ? 'Continue' : 'Start Reading' }}</span>
+              <span>Continue</span>
             </Button>
-            <Button
-              @click="deleteBook(book)"
-              :disabled="deletingBook === book.id"
-              variant="destructive"
-              class="w-[120px]"
-            >
-              <span v-if="deletingBook === book.id">Deleting...</span>
-              <span v-else>Delete</span>
-            </Button>
+
           </div>
         </div>
       </div>
@@ -83,11 +72,19 @@ import { supabase } from '@/supabase'
 import UploadComponent from './BooksHeader.vue'
 import { useRouter } from 'vue-router'
 import type { Session } from '@supabase/supabase-js'
-import type { Book, ReadingProgress } from '../types'
 import Button from '@/components/ui/button/Button.vue'
+import { useBooks } from '@/composables/useBooks'
+import { storeToRefs } from 'pinia'
+import { useReaderStore } from '@/store'
+import type { Book } from '../types'
+
+const uploadMessage = ref('')
+const messageType = ref<'success' | 'error'>('success')
 
 const router = useRouter()
 const session = ref<Session>()
+const { loadBooks } = useBooks()
+const { booksList } = storeToRefs(useReaderStore())
 
 onMounted(() => {
   supabase.auth.getSession().then(({ data }) => {
@@ -96,104 +93,16 @@ onMounted(() => {
   supabase.auth.onAuthStateChange((_, _session) => {
     session.value = _session as Session
   })
+  loadBooks()
 })
 
-// State
-const books = ref<Book[]>([])
-const readingProgress = ref<ReadingProgress[]>([])
+// const readingProgress = ref<ReadingProgress[]>([])
 const loading = ref(false)
 const deletingBook = ref<string | null>(null)
-const uploadMessage = ref('')
-const messageType = ref<'success' | 'error'>('success')
-
-// Methods
-const loadBooks = async () => {
-  try {
-    loading.value = true
-
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) { return }
-
-    // Load books
-    const { data: booksData, error: booksError } = await supabase
-      .from('books')
-      .select('*')
-      .eq('user_id', user.id)
-      .order('uploaded_at', { ascending: false })
-
-    if (booksError) { throw booksError }
-
-    books.value = booksData || []
-
-    // Load reading progress
-    const { data: progressData, error: progressError } = await supabase
-      .from('reading_progress')
-      .select('*')
-      .eq('user_id', user.id)
-
-    if (progressError) { throw progressError }
-
-    readingProgress.value = progressData || []
-  } catch (error) {
-    console.error('Error loading books:', error)
-    showMessage('Failed to load books', 'error')
-  } finally {
-    loading.value = false
-  }
-}
 
 const openBook = (book: Book) => {
   // Navigate to the book reader page
   router.push({ path: `/books/${book.id}` })
-}
-
-const deleteBook = async (book: Book) => {
-  if (!confirm(`Are you sure you want to delete "${book.title}"?`)) { return }
-
-  try {
-    deletingBook.value = book.id
-
-    // Delete from storage
-    const { error: storageError } = await supabase.storage
-      .from('epub-files')
-      .remove([book.file_path])
-
-    if (storageError) { console.warn('Storage deletion error:', storageError) }
-
-    // Delete reading progress
-    await supabase
-      .from('reading_progress')
-      .delete()
-      .eq('book_id', book.id)
-
-    // Delete book record
-    const { error: dbError } = await supabase
-      .from('books')
-      .delete()
-      .eq('id', book.id)
-
-    if (dbError) { throw dbError }
-
-    showMessage(`"${book.title}" deleted successfully`, 'success')
-    await loadBooks()
-  } catch (error) {
-    console.error('Error deleting book:', error)
-    showMessage('Failed to delete book', 'error')
-  } finally {
-    deletingBook.value = null
-  }
-}
-
-const getReadingProgress = (bookId: string): ReadingProgress | undefined => {
-  return readingProgress.value.find(p => p.book_id === bookId)
-}
-
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) { return '0 Bytes' }
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
 }
 
 const showMessage = (message: string, type: 'success' | 'error') => {
@@ -205,7 +114,7 @@ const showMessage = (message: string, type: 'success' | 'error') => {
 }
 
 const handleBookUploaded = (book: Book) => {
-  showMessage(`"${book.title}" uploaded successfully!`, 'success')
+  showMessage(`"File uploaded successfully!`, 'success')
   loadBooks()
 }
 
@@ -213,9 +122,52 @@ const handleUploadError = (error: string) => {
   showMessage(error, 'error')
 }
 
-onMounted(() => {
-  loadBooks()
-})
+// const deleteBook = async (book: Book) => {
+//   if (!confirm(`Are you sure you want to delete "${book.title}"?`)) { return }
+
+//   try {
+//     deletingBook.value = book.id
+
+//     // Delete from storage
+//     const { error: storageError } = await supabase.storage
+//       .from('epub-files')
+//       .remove([book.file_path])
+
+//     if (storageError) { console.warn('Storage deletion error:', storageError) }
+
+//     // Delete reading progress
+//     await supabase
+//       .from('reading_progress')
+//       .delete()
+//       .eq('book_id', book.id)
+
+//     // Delete book record
+//     const { error: dbError } = await supabase
+//       .from('books')
+//       .delete()
+//       .eq('id', book.id)
+
+//     if (dbError) { throw dbError }
+
+//     await loadBooks()
+//   } catch (error) {
+//     console.error('Error deleting book:', error)
+//   } finally {
+//     deletingBook.value = null
+//   }
+// }
+
+// const getReadingProgress = (bookId: string): ReadingProgress | undefined => {
+//   return readingProgress.value.find(p => p.book_id === bookId)
+// }
+
+// const formatFileSize = (bytes: number): string => {
+//   if (bytes === 0) { return '0 Bytes' }
+//   const k = 1024
+//   const sizes = ['Bytes', 'KB', 'MB', 'GB']
+//   const i = Math.floor(Math.log(bytes) / Math.log(k))
+//   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(2))} ${sizes[i]}`
+// }
 
 </script>
 

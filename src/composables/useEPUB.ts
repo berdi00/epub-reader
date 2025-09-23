@@ -2,7 +2,7 @@
 import { ref, nextTick, watch } from 'vue'
 import JSZip from 'jszip'
 import { storeToRefs } from 'pinia'
-import { useReaderStore } from '@/features/reader/store'
+import { useReaderStore } from '@/store'
 import type { BookMetadata, Chapter, ManifestMap } from '@/features/reader/types'
 
 export const useEpub = () => {
