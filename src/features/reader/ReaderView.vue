@@ -165,7 +165,7 @@
       </div>
 
       <!-- Fixed scroll container with proper event binding -->
-      <div class="h-full overflow-y-auto overflow-x-hidden">
+      <div ref="container" class="h-full overflow-y-auto overflow-x-hidden">
         <div
           ref="scrollContainer"
           class="scroll-container max-w-2xl mx-auto px-4"
@@ -208,6 +208,7 @@ const showSettings = ref(false)
 const currentBook = ref<Book | null>(null)
 const readingProgress = ref<ReadingProgress | null>(null)
 const scrollContainer = ref<HTMLElement | null>(null)
+const container = ref<HTMLElement | null>(null)
 
 // EPUB.js instances
 const book = ref<any>(null)
@@ -266,9 +267,12 @@ const updateLineHeight = () => {
 }
 
 const nextPage = () => {
-  if (rendition.value) {
-    rendition.value.next()
+  if (container.value && scrollContainer.value) {
+    container.value.scrollTop = scrollContainer.value.scrollTop + 500
   }
+  // if (rendition.value) {
+  //   rendition.value.next()
+  // }
 }
 
 const prevPage = () => {
@@ -379,31 +383,46 @@ const initializeReader = async () => {
     book.value = ePub(currentBook.value.path)
     await book.value.ready
 
-    // Render book in scrolled-doc (full vertical scroll)
+    // You can control the break length, e.g. 1000 chars per location
+    await book.value.locations.generate(1600)
+    console.log('Locations generated:', book.value.locations.length)
+
     rendition.value = book.value.renderTo(scrollContainer.value, {
       width: '100%',
       height: '100%',
-      flow: 'scrolled', // Enable scrolling mode
-      spread: 'none'
+      spread: 'none',
+      allowScriptedContent: true,
+      flow: 'scrolled-doc'
     })
 
-    // Apply themes, font size, line height
     updateTheme()
     updateFontSize()
     updateLineHeight()
 
-    await rendition.value.display()
-
-    // Restore saved progress if exists
     if (readingProgress.value?.cfi) {
-      await rendition.value.display(readingProgress.value.cfi)
+      try {
+        await rendition.value.display(readingProgress.value.href)
+
+        // wait a tick so DOM is rendered
+        await nextTick()
+
+        rendition.value.on('rendered', () => {
+          console.log(book.value.locations, 'locations')
+          const percent = book.value.locations.percentageFromCfi(readingProgress.value?.cfi)
+          console.log(readingProgress.value?.cfi, 'cfi get')
+          console.log(percent, 'percent')
+
+          if (scrollContainer.value && container.value) {
+            container.value.scrollTop = scrollContainer.value.scrollHeight * percent
+            console.log('Scrolled to percent:', percent)
+          }
+        })
+      } catch (error) {
+        console.log(error, 'error failed to use cfi')
+      }
     }
 
-    // Add scroll listener after content is rendered
-    setTimeout(() => {
-      loading.value = false
-      console.log('Reader initialized successfully')
-    }, 1000)
+    loading.value = false
   } catch (error) {
     console.error('Failed to initialize reader:', error)
     router.push({ name: 'home' })
@@ -420,13 +439,16 @@ onBeforeUnmount(async () => {
   if (rendition.value && user.value && currentBook.value) {
     try {
       const location = rendition.value.currentLocation()
+      console.log(location, 'location')
       if (location?.start?.cfi) {
         const cfi = location.start.cfi
+        console.log(cfi, 'cfi save')
         const progress = book.value.locations.percentageFromCfi(cfi) * 100
 
         await saveReadingProgress({
           user_id: user.value.id,
           book_id: currentBook.value.id,
+          href: location.start.href,
           cfi,
           progress
         })

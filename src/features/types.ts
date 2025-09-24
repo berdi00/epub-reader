@@ -11,5 +11,6 @@ export interface ReadingProgress {
   user_id: string;
   cfi: string
   progress: number
+  href: string,
   last_read_at: string
 }
