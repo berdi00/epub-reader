@@ -98,7 +98,6 @@ onMounted(() => {
 
 // const readingProgress = ref<ReadingProgress[]>([])
 const loading = ref(false)
-const deletingBook = ref<string | null>(null)
 
 const openBook = (book: Book) => {
   // Navigate to the book reader page
@@ -113,7 +112,7 @@ const showMessage = (message: string, type: 'success' | 'error') => {
   }, 5000)
 }
 
-const handleBookUploaded = (book: Book) => {
+const handleBookUploaded = (_book: Book) => {
   showMessage(`"File uploaded successfully!`, 'success')
   loadBooks()
 }

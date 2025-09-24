@@ -29,7 +29,7 @@ export const useBooks = () => {
       booksList.value = booksData || []
 
       // Load reading progress
-      const { data: progressData, error: progressError } = await supabase
+      const { error: progressError } = await supabase
         .from('reading_progress')
         .select('*')
         .eq('user_id', user.id)

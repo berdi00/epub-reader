@@ -450,8 +450,8 @@ export const useEpub = () => {
       if (chapterElement) {
         const chapterHeight = chapterElement.offsetHeight
         const targetScrollWithinChapter = (chapterProgressPercentage / 100) * chapterHeight
-        const extraDesktop = 400
-        const extraMobile = 250
+        // const extraDesktop = 400
+        // const extraMobile = 250
         const targetScrollPosition = chapterElement.offsetTop + targetScrollWithinChapter
         const contentElement = document.querySelector('.reader-content')
         if (contentElement) {

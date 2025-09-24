@@ -331,7 +331,7 @@ const updateTheme = () => {
     }
   }
 
-  rendition.value.themes.register('selected', themes[theme.value])
+  rendition.value.themes.register('selected', themes[theme.value as keyof typeof themes])
   rendition.value.themes.select('selected')
 }
 

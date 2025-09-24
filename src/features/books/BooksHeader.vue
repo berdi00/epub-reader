@@ -128,7 +128,7 @@ const handleFileUpload = async (event: Event): Promise<void> => {
     const fileName = `${user.id}/${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
 
     // Upload file to Supabase Storage
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('epub-files') // Make sure this bucket exists in your Supabase Storage
       .upload(fileName, file)
 
@@ -162,7 +162,7 @@ const handleFileUpload = async (event: Event): Promise<void> => {
     })
 
     // Upload cover to Supabase Storage
-    const { data: coverData, error: uploadCoverError } = await supabase.storage
+    const { error: uploadCoverError } = await supabase.storage
       .from('book_covers') // Make sure this bucket exists in your Supabase Storage
       .upload(`covers/${coverFile.name}`, coverFile, {
         upsert: true, // overwrite if exists
