@@ -22,7 +22,6 @@ export function useSupabase() {
     user.value = undefined
   }
 
-  // Initialize auth state
   getCurrentUser()
 
   // Listen for auth changes
