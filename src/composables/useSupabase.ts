@@ -24,7 +24,6 @@ export function useSupabase() {
 
   getCurrentUser()
 
-  // Listen for auth changes
   supabase.auth.onAuthStateChange((_event, session) => {
     user.value = session?.user as User || null
     loading.value = false
